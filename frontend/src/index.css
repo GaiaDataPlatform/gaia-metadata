@@ -94,6 +94,7 @@ body { margin: 0; font-family: "DM Sans", sans-serif; }
 [data-theme="light"] .border-navy-500 { border-color: #a0aec0 !important; }
 
 [data-theme="light"] .text-ocean-100 { color: #1a202c !important; }
+[data-theme="light"] .text-ocean-100\/60 { color: #2a202c !important; }
 [data-theme="light"] .text-ocean-200 { color: #2d3748 !important; }
 [data-theme="light"] .text-ocean-300 { color: #0077b6 !important; }
 [data-theme="light"] .text-ocean-400 { color: #4a5568 !important; }
@@ -169,6 +170,7 @@ body { margin: 0; font-family: "DM Sans", sans-serif; }
 [data-theme="impact"] .border-navy-500  { border-color: #9ca3af !important; }
 
 [data-theme="impact"] .text-ocean-100  { color: #111827 !important; }
+[data-theme="impact"] .text-ocean-100\/60  { color: #211827 !important; }
 [data-theme="impact"] .text-ocean-200  { color: #1f2937 !important; }
 [data-theme="impact"] .text-ocean-300  { color: #c2410c !important; }
 [data-theme="impact"] .text-ocean-400  { color: #6b7280 !important; }
