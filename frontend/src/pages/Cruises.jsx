@@ -9,11 +9,53 @@ import Badge from "../components/Badge";
 import Modal from "../components/Modal";
 import Btn from "../components/Btn";
 import Spinner from "../components/Spinner";
-import { Plus, Upload, Pencil, Trash2, Play, CheckCircle, Download, ExternalLink } from "lucide-react";
+import { Plus, Upload, Pencil, Trash2, Play, CheckCircle, Download, ExternalLink, X, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
-// Defined at module level — prevents React from unmounting/remounting on every render (focus-loss fix)
-function Field({ label, value, onChange, type = "text", placeholder, required }) {
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function Toast({ toasts, remove }) {
+  return (
+    <div className="fixed bottom-4 right-4 z-50 space-y-2 max-w-sm w-full">
+      {toasts.map(t => (
+        <div key={t.id}
+          className={`flex items-start gap-3 px-4 py-3 rounded-lg border shadow-lg text-sm fade-slide-in
+            ${t.type === "error"
+              ? "bg-red-950 border-red-600 text-red-200"
+              : "bg-emerald-950 border-emerald-600 text-emerald-200"}`}>
+          <AlertCircle size={15} className="shrink-0 mt-0.5" />
+          <p className="flex-1 leading-snug">{t.msg}</p>
+          <button onClick={() => remove(t.id)} className="shrink-0 opacity-60 hover:opacity-100">
+            <X size={13} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const add = (msg, type = "error") => {
+    const id = Date.now();
+    setToasts(p => [...p, { id, msg, type }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 6000);
+  };
+  const remove = (id) => setToasts(p => p.filter(t => t.id !== id));
+  return { toasts, remove, error: (m) => add(m, "error"), success: (m) => add(m, "success") };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function extractErrorMessage(err) {
+  const d = err?.response?.data?.detail;
+  if (!d) return err?.message || "An unexpected error occurred";
+  if (typeof d === "string") return d;
+  // Structured detail from import endpoint
+  if (typeof d === "object" && d.errors) return d.errors.join("\n");
+  return JSON.stringify(d);
+}
+
+// ── Field ─────────────────────────────────────────────────────────────────────
+function Field({ label, value, onChange, type = "text", required }) {
   return (
     <div>
       <label className="block text-xs font-display font-medium text-ocean-300 mb-1">
@@ -23,13 +65,13 @@ function Field({ label, value, onChange, type = "text", placeholder, required })
         type={type}
         value={value || ""}
         onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
         className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-ocean-100 focus:outline-none focus:border-ocean-400 font-mono"
       />
     </div>
   );
 }
 
+// ── CruiseForm ────────────────────────────────────────────────────────────────
 function CruiseForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial || {
     code: "", name: "", start_date: "", end_date: "",
@@ -84,17 +126,13 @@ function CruiseForm({ initial, onSave, onCancel }) {
       </div>
       <div>
         <label className="block text-xs font-display font-medium text-ocean-300 mb-1">Study area</label>
-        <input
-          value={form.study_area || ""} onChange={e => set("study_area")(e.target.value)}
-          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-ocean-100 focus:outline-none focus:border-ocean-400 font-mono"
-        />
+        <input value={form.study_area || ""} onChange={e => set("study_area")(e.target.value)}
+          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-ocean-100 focus:outline-none focus:border-ocean-400 font-mono" />
       </div>
       <div>
         <label className="block text-xs font-display font-medium text-ocean-300 mb-1">Description</label>
-        <textarea
-          rows={3} value={form.description || ""} onChange={e => set("description")(e.target.value)}
-          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-ocean-100 focus:outline-none focus:border-ocean-400 font-mono"
-        />
+        <textarea rows={3} value={form.description || ""} onChange={e => set("description")(e.target.value)}
+          className="w-full bg-navy-900 border border-navy-600 rounded-lg px-3 py-2 text-sm text-ocean-100 focus:outline-none focus:border-ocean-400 font-mono" />
       </div>
       <Field label="Number of participants" value={form.num_participants} onChange={set("num_participants")} type="number" />
 
@@ -108,46 +146,77 @@ function CruiseForm({ initial, onSave, onCancel }) {
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function Cruises() {
-  const { isCapo } = useAuth();
+  const { isCapo, isAdmin } = useAuth();
   const [cruises, setCruises] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState(null);
   const [importing, setImporting] = useState(false);
+  const { toasts, remove, error, success } = useToast();
 
   const load = async () => {
     setLoading(true);
     try { setCruises(await getCruises()); }
+    catch (e) { error(extractErrorMessage(e)); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
-  const handleCreate = async (data) => { await createCruise(data); setShowCreate(false); load(); };
-  const handleUpdate = async (data) => { await updateCruise(editing.id, data); setEditing(null); load(); };
+  const handleCreate = async (data) => {
+    try { await createCruise(data); setShowCreate(false); load(); success("Cruise created"); }
+    catch (e) { error(extractErrorMessage(e)); }
+  };
+
+  const handleUpdate = async (data) => {
+    try { await updateCruise(editing.id, data); setEditing(null); load(); success("Cruise updated"); }
+    catch (e) { error(extractErrorMessage(e)); }
+  };
 
   const handleDelete = async (cruise) => {
     if (!confirm(`Delete cruise ${cruise.code}?`)) return;
-    await deleteCruise(cruise.id); load();
+    try { await deleteCruise(cruise.id); load(); success(`Cruise ${cruise.code} deleted`); }
+    catch (e) { error(extractErrorMessage(e)); }
   };
 
   const handleActivate = async (cruise) => {
     if (!confirm(`Activate cruise ${cruise.code}?`)) return;
-    await activateCruise(cruise.id); load();
+    try { await activateCruise(cruise.id); load(); success(`Cruise ${cruise.code} activated`); }
+    catch (e) { error(extractErrorMessage(e)); }
   };
 
   const handleComplete = async (cruise) => {
     if (!confirm(`Complete cruise ${cruise.code}?`)) return;
-    await completeCruise(cruise.id); load();
+    try { await completeCruise(cruise.id); load(); success(`Cruise ${cruise.code} completed`); }
+    catch (e) { error(extractErrorMessage(e)); }
   };
 
   const handleImport = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setImporting(true);
-    try { await importCruisesCSV(file); load(); }
-    finally { setImporting(false); e.target.value = ""; }
+    try {
+      const result = await importCruisesCSV(file);
+      load();
+      let msg = `Imported ${result.created} cruise(s)`;
+      if (result.skipped) msg += `, ${result.skipped} skipped`;
+      success(msg);
+      if (result.errors?.length) {
+        result.errors.forEach(e => error(e));
+      }
+    } catch (e) {
+      error(extractErrorMessage(e));
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleExportCSV = async (cruise) => {
+    try { await exportCruiseCSV(cruise.id); }
+    catch (e) { error(extractErrorMessage(e)); }
   };
 
   const statusOrder = { active: 0, planned: 1, completed: 2 };
@@ -182,7 +251,7 @@ export default function Cruises() {
             {sorted.map(cruise => (
               <div key={cruise.id}
                    className={`bg-navy-800 border rounded-xl px-4 py-3.5 flex items-center gap-4 transition-all
-                     ${cruise.status === "active" ? "border-emerald-500/40" : "border-navy-600"}`}>
+                     ${cruise.status === "active" ? "border-emerald-500/40 bg-emerald-500/5" : "border-navy-600"}`}>
                 <div className={`w-2 h-2 rounded-full shrink-0 ${
                   cruise.status === "active" ? "bg-emerald-400 animate-pulse" :
                   cruise.status === "planned" ? "bg-yellow-400" : "bg-ocean-500"
@@ -208,14 +277,14 @@ export default function Cruises() {
                         className="p-1.5 text-ocean-400 hover:text-ocean-200 transition-colors" title="Details">
                     <ExternalLink size={14} />
                   </Link>
-                  <button onClick={() => exportCruiseCSV(cruise.id)}
+                  <button onClick={() => handleExportCSV(cruise)}
                           className="p-1.5 text-ocean-400 hover:text-ocean-200 transition-colors" title="Export CSV">
                     <Download size={14} />
                   </button>
                   {isCapo && (
                     <>
                       <button onClick={() => setEditing(cruise)}
-                              className="p-1.5 text-ocean-400 hover:text-ocean-200 transition-colors">
+                              className="p-1.5 text-ocean-400 hover:text-ocean-200 transition-colors" title="Edit">
                         <Pencil size={14} />
                       </button>
                       {cruise.status === "planned" && (
@@ -230,9 +299,9 @@ export default function Cruises() {
                           <CheckCircle size={14} />
                         </button>
                       )}
-                      {cruise.status !== "active" && (
+                      {isAdmin && cruise.status !== "active" && (
                         <button onClick={() => handleDelete(cruise)}
-                                className="p-1.5 text-red-400 hover:text-red-300 transition-colors">
+                                className="p-1.5 text-red-400 hover:text-red-300 transition-colors" title="Delete">
                           <Trash2 size={14} />
                         </button>
                       )}
@@ -252,6 +321,8 @@ export default function Cruises() {
       <Modal open={!!editing} onClose={() => setEditing(null)} title={`Edit ${editing?.code}`} size="lg">
         {editing && <CruiseForm initial={editing} onSave={handleUpdate} onCancel={() => setEditing(null)} />}
       </Modal>
+
+      <Toast toasts={toasts} remove={remove} />
     </Layout>
   );
 }

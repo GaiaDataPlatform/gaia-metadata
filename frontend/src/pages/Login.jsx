@@ -36,7 +36,7 @@ export default function Login() {
             <Anchor size={24} className="text-ocean-300" />
           </div>
           <h1 className="font-display font-bold text-2xl text-ocean-100">Gaia Metadata</h1>
-          <p className="text-ocean-400 text-sm mt-1 font-mono">R/V Gaia Blu · CNR</p>
+          <p className="text-ocean-400 text-sm mt-1 font-mono">R/V Gaia Blu · CNR IRBIM</p>
         </div>
 
         {/* Form */}
