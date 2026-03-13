@@ -1,4 +1,4 @@
-# Gaia Metadata v2.1.0
+# Gaia Metadata v0.3.4
 
 Console di gestione campagne oceanografiche — R/V Gaia Blu  
 **GdL Dati Gaia Bu - CNR**
@@ -114,7 +114,7 @@ docker-compose up -d --build
 
 ## Changelog
 
-### v2.1.0
+### v0.3.4
 - Versione iniziale
 - Gestione campagne (CRUD, stati: pianificata/attiva/conclusa)
 - Cruscotto task real-time con auto-refresh
