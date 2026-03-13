@@ -1,0 +1,75 @@
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: gaia-metadata-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gaia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gaiapass}
+      POSTGRES_DB: ${POSTGRES_DB:-gaia_metadata}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gaia} -d ${POSTGRES_DB:-gaia_metadata}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - gaia-net
+
+  backend:
+    build: ./backend
+    container_name: gaia-metadata-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-gaia}:${POSTGRES_PASSWORD:-gaiapass}@db:5432/${POSTGRES_DB:-gaia_metadata}
+      SECRET_KEY: ${SECRET_KEY:-changeme-use-openssl-rand-hex-32-in-production}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-525600}
+      NMEA_HOST: ${NMEA_HOST:-host.docker.internal}
+      NMEA_PORT: ${NMEA_PORT:-10115}
+      GAIA_ACQUISITION_URL: ${GAIA_ACQUISITION_URL:-http://host.docker.internal:8080}
+      VESSEL_NAME: ${VESSEL_NAME:-Gaia Blu}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - gaia-net
+
+  frontend:
+    build: ./frontend
+    container_name: gaia-metadata-ui
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-8088}:80"
+    restart: unless-stopped
+    networks:
+      - gaia-net
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: gaia-metadata-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@gaiablu.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-gaiaadmin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      - db
+    networks:
+      - gaia-net
+
+volumes:
+  pgdata:
+    name: gaia-metadata-pgdata
+
+networks:
+  gaia-net:
+    name: gaia-metadata-network
